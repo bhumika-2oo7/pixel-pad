@@ -238,66 +238,144 @@
     if (fillMode) label = "fill";
     if (mirrorMode) label += " + mirror";
     modeLabel.textContent ="Mode: "+ label;
-    
+    fillBtn.classList.toggle("on", fillMode);
+    mirrorBtn.classList.toggle("on", mirrorMode);
+    document.getElementById("eraser").classList.toggle("on", current === "eraser");
+
+    undoBtn.disabled=undoStack.length === 0;
+    redoBtn.disabled=redostack.length ===0;
 
   }
 
+  function snapshot(){
+    return cells.map(c => c.style.background);
+  }
 
+  function restore(state){
+    cells.forEach((c,i) => c.style.background = state[i]);
+  }
 
+  function saveHistory(){
+    undoStack.push(snapshot())
+      undoStack.push(snapshot());
+      if (undoStack.length> MAX_HISTORY) undoStack.shift();
+      redoStack=[];
+      updateStatus
+    }
 
+  function redo(){
+    if (redoStack.length===0) return;
+    undoStack.push(snapshot());
+    restore(redoStack.pop());
+    updateStatus();
+  }
 
+  // PAINTING
 
+  function colorCell(cell){
+    cell.style.background = current === "erase" ? "" : current;
 
+  }
 
+  function mirrorOf(cell){
+    const i =Number(cell.dataset.index);
+    const row = Math.floor(i/SIZE);
+    const col =i% SIZE;
+    return cells[row*SIZE+(SIZE-1- col)];
 
-
-
-
-
-
-
-
-
-
-
-
-
-
+  }
 
   function paint(e) {
     const target = document.elementFromPoint(e.clientX, e.clientY);
     if (target && target.classList.contains("cell")) {
-      target.style.background = current === "erase" ? "" : current;
+      colorCell(target);
+      if (mirrorMode) colorCell(mirrorOf(targets));
+      updatesStatus();
     }
   }
 
-  grid.addEventListener("pointerdown", e => { painting = true; paint(e); });
+
+  // FILL TOOL
+
+  function floodFill(starcell){
+    const startColor = startCell.style.background;
+    const newColor = current === "erase" ? "" : normalize(current);
+
+    if(startColor === newColor)return;
+
+    const stack =[Number(startCell.dataset.index)];
+    const seen = new Set();
+
+    while (stack.length){
+      const i = stack.pop();
+      if (seen.has(i)) continue;
+      seen.add(i);
+
+      const cell = cells[i];
+      if(cell.style.background !== startColor) continue;
+
+      cell.style.background = newColor;
+
+      const row = Math.floor(i/SIZE)
+      const col = i%SIZE;
+
+
+      if (row>0) stack.push(i -SIZE);
+      if (row < SIZE -1) stack.push(i-1);
+      if (col>0) stack.push(i-1);
+      if (col<SIZE-1) stack.push(i+1);
+    }
+  }
+  
+  grid.addEventListener("pointermove",e =>{
+    const target = document.elementFromPoint(e.clientX, e.clientY);
+    if (!target || !target.classList.contains("cell")) return;
+
+    saveHistory();
+
+    if (fillMode){
+      floodFill(target);
+      updateStatus();
+      return;
+
+    }
+
+    painting = true;
+    paint(e);
+  
+  });
   grid.addEventListener("pointermove", e => { if (painting) paint(e); });
   window.addEventListener("pointerup", () => painting = false);
 
+  // BUTTONS
+
   custom.addEventListener("input", () => setColor(custom.value, null));
   document.getElementById("eraser").onclick = () => setColor("erase", null);
-  document.getElementById("clear").onclick = () => cells.forEach(c => c.style.background = "");
-  document.getElementById("save").onclick = () => {
-    const scale = 20;
-    const canvas = document.createElement("canvas");
-    canvas.width = canvas.height = SIZE * scale;
-    const ctx = canvas.getContext("2d");
-    ctx.fillStyle = "#fff";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    cells.forEach((c, i) => {
-      if (c.style.background) {
-        ctx.fillStyle = c.style.background;
-        ctx.fillRect((i % SIZE) * scale, Math.floor(i / SIZE) * scale, scale, scale);
-      }
-    });
-    const a = document.createElement("a");
-    a.download = "my-pixel-art.png";
-    a.href = canvas.toDataURL("image/png");
-    a.click();
+
+  fillBtn.onclick = () =>{
+    fillMode= !fillMode;
+    updateStatus();
+
   };
 
+  mirrorBtn.onclick =() => {
+    mirrorMode =!mirrorMode;
+    updateStatus();
+  };
 
+  linesBtn.onclick=() => {
+    grid.classList.toggle("no-lines");
+  };
+ 
+
+
+  document.getElementById("clear").onclick = () => {
+    saveHistory();
+    cells.forEach(c => c.style.background = "");
+    updateStatus();
+  };
+  undoBtn.onclick = undo;
+  redoBtn.onclick = redo;
 
 
 
